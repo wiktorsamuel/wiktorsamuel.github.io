@@ -611,7 +611,16 @@ async function saveEdit(id) {
   r.description = document.getElementById('e-desc').value.trim();
   r.editLog = { who: currentAdmin.login, at: Date.now() };
   editingId = null;
-  await updateReport(id, changes); renderAdmin();
+  await updateReport(id, {
+    username: r.username,
+    country: r.country,
+    profile: r.profile,
+    listing: r.listing,
+    brand: r.brand,
+    description: r.description,
+    edit_log: r.editLog
+  });
+  renderAdmin();
 }
 
 function handleFiles(files) {
@@ -662,8 +671,27 @@ function clearForm() {
 }
 
 
-function approveReport(id) { openModal('Zatwierdzić zgłoszenie?', 'Profil trafi do publicznej bazy danych.', () => { const r = reports.find(x => x.id === id); if (r) { r.status = 'approved'; updateReport(id, changes); updateAll(); renderAdmin(); } }); }
-function rejectReport(id) { openModal('Odrzucić zgłoszenie?', 'Zgłoszenie nie pojawi się w publicznej bazie.', () => { const r = reports.find(x => x.id === id); if (r) { r.status = 'rejected'; updateReport(id, changes); updateAll(); renderAdmin(); } }); }
+function approveReport(id) {
+  openModal('Zatwierdzić zgłoszenie?', 'Profil trafi do publicznej bazy danych.', async () => {
+    const r = reports.find(x => x.id === id);
+    if (r) {
+      r.status = 'approved';
+      await updateReport(id, { status: 'approved' });
+      updateAll(); renderAdmin();
+    }
+  });
+}
+
+function rejectReport(id) {
+  openModal('Odrzucić zgłoszenie?', 'Zgłoszenie nie pojawi się w publicznej bazie.', async () => {
+    const r = reports.find(x => x.id === id);
+    if (r) {
+      r.status = 'rejected';
+      await updateReport(id, { status: 'rejected' });
+      updateAll(); renderAdmin();
+    }
+  });
+}
 function openModal(t, b, cb) { document.getElementById('modal-title').textContent = t; document.getElementById('modal-body').textContent = b; document.getElementById('modal').classList.add('open'); modalCallback = cb; }
 function closeModal() { document.getElementById('modal').classList.remove('open'); modalCallback = null; }
 document.getElementById('modal-confirm').onclick = () => { if (modalCallback) modalCallback(); closeModal(); };
