@@ -611,7 +611,7 @@ async function saveEdit(id) {
   r.description = document.getElementById('e-desc').value.trim();
   r.editLog = { who: currentAdmin.login, at: Date.now() };
   editingId = null;
-  await saveReports(); renderAdmin();
+  await updateReport(id, changes); renderAdmin();
 }
 
 function handleFiles(files) {
@@ -648,7 +648,7 @@ function submitReport() {
     if (!confirm('To ogłoszenie zostało już zgłoszone. Czy mimo to chcesz wysłać?')) return;
   }
   const r = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), timestamp: Date.now(), status: 'pending', username, country, profile: document.getElementById('f-profile').value.trim(), listing, brand, description: document.getElementById('f-desc').value.trim(), photos: uploadedPhotos.map(p => ({ name: p.name, dataUrl: p.dataUrl })), editLog: null };
-  reports.unshift(r); saveReports(); updateAll();
+  reports.unshift(r); saveReport(r); updateAll();
   document.getElementById('success-msg').classList.add('show');
   clearForm();
   setTimeout(() => document.getElementById('success-msg').classList.remove('show'), 7000);
@@ -662,8 +662,8 @@ function clearForm() {
 }
 
 
-function approveReport(id) { openModal('Zatwierdzić zgłoszenie?', 'Profil trafi do publicznej bazy danych.', () => { const r = reports.find(x => x.id === id); if (r) { r.status = 'approved'; saveReports(); updateAll(); renderAdmin(); } }); }
-function rejectReport(id) { openModal('Odrzucić zgłoszenie?', 'Zgłoszenie nie pojawi się w publicznej bazie.', () => { const r = reports.find(x => x.id === id); if (r) { r.status = 'rejected'; saveReports(); updateAll(); renderAdmin(); } }); }
+function approveReport(id) { openModal('Zatwierdzić zgłoszenie?', 'Profil trafi do publicznej bazy danych.', () => { const r = reports.find(x => x.id === id); if (r) { r.status = 'approved'; updateReport(id, changes); updateAll(); renderAdmin(); } }); }
+function rejectReport(id) { openModal('Odrzucić zgłoszenie?', 'Zgłoszenie nie pojawi się w publicznej bazie.', () => { const r = reports.find(x => x.id === id); if (r) { r.status = 'rejected'; updateReport(id, changes); updateAll(); renderAdmin(); } }); }
 function openModal(t, b, cb) { document.getElementById('modal-title').textContent = t; document.getElementById('modal-body').textContent = b; document.getElementById('modal').classList.add('open'); modalCallback = cb; }
 function closeModal() { document.getElementById('modal').classList.remove('open'); modalCallback = null; }
 document.getElementById('modal-confirm').onclick = () => { if (modalCallback) modalCallback(); closeModal(); };
