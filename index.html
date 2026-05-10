@@ -53,14 +53,14 @@ main{padding:32px 28px;max-width:1100px;margin:0 auto;width:100%}
 .contact-section p{font-size:14px;color:var(--text2);line-height:1.8;margin-bottom:14px}
 .contact-email{display:inline-flex;align-items:center;gap:8px;color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:14px;border-bottom:1px solid rgba(255,61,61,.3);padding-bottom:2px;transition:border-color .2s}
 .contact-email:hover{border-color:var(--accent)}
-.home-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:48px}
+.home-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:48px}
 .hstat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:20px 24px;text-align:center}
 .hstat-value{font-size:32px;font-weight:800;margin-bottom:4px}
 .hstat-value.red{color:var(--accent)}.hstat-value.green{color:var(--green)}.hstat-value.amber{color:var(--amber)}
 .hstat-label{font-size:12px;color:var(--text2);font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px}
 
 /* STATS */
-.stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:32px}
+.stats-bar{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:32px}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px}
 .stat-label{font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text2);text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)}
 .stat-value{font-size:28px;font-weight:800;line-height:1}
@@ -308,8 +308,7 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:va
     <p class="tagline">Baza zweryfikowanych sprzedawców podróbek, tworzona przez społeczność. Sprawdź, zanim kupisz.</p>
   </div>
   <div class="home-stats">
-    <div class="hstat"><div class="hstat-value red" id="hs-total">0</div><div class="hstat-label">Zgłoszonych przypadków</div></div>
-    <div class="hstat"><div class="hstat-value green" id="hs-approved">0</div><div class="hstat-label">Zatwierdzonych</div></div>
+    <div class="hstat"><div class="hstat-value red" id="hs-total">0</div><div class="hstat-label">Zweryfikowanych przypadków</div></div>
     <div class="hstat"><div class="hstat-value amber" id="hs-users">0</div><div class="hstat-label">Unikalnych sprzedawców</div></div>
   </div>
   <div class="home-sections">
@@ -344,7 +343,6 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:va
 <!-- BROWSE -->
 <div class="view" id="view-browse">
   <div class="stats-bar">
-    <div class="stat-card"><div class="stat-label">Wszystkich zgłoszeń</div><div class="stat-value" id="stat-total">0</div></div>
     <div class="stat-card"><div class="stat-label">Zatwierdzonych</div><div class="stat-value green" id="stat-approved">0</div></div>
     <div class="stat-card"><div class="stat-label">Oczekujących</div><div class="stat-value amber" id="stat-pending">0</div></div>
   </div>
@@ -447,6 +445,22 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const { createClient } = supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (session && session.user) {
+    const role = session.user.user_metadata?.role || 'Admin';
+    currentAdmin = { login: session.user.email, role };
+    document.getElementById('tab-admin').style.display = '';
+    document.getElementById('tab-login').style.display = 'none';
+    document.getElementById('nav-admin-info').style.display = 'flex';
+    document.getElementById('nav-who').textContent = `${session.user.email} · ${role}`;
+  } else if (event === 'SIGNED_OUT') {
+    currentAdmin = null;
+    document.getElementById('tab-admin').style.display = 'none';
+    document.getElementById('tab-login').style.display = '';
+    document.getElementById('nav-admin-info').style.display = 'none';
+  }
+});
 
 async function doLogin() {
   const email = document.getElementById('login-user').value.trim();
@@ -603,14 +617,12 @@ async function updateReport(id, changes) {
 
 function updateAll() { updateStats(); updateBadge(); updateHomeStats(); renderBrowse(); }
 function updateStats() {
-  document.getElementById('stat-total').textContent = reports.length;
   document.getElementById('stat-approved').textContent = reports.filter(r => r.status === 'approved').length;
   document.getElementById('stat-pending').textContent = reports.filter(r => r.status === 'pending').length;
 }
 function updateBadge() { document.getElementById('pending-badge').textContent = reports.filter(r => r.status === 'pending').length; }
 function updateHomeStats() {
-  document.getElementById('hs-total').textContent = reports.length;
-  document.getElementById('hs-approved').textContent = reports.filter(r => r.status === 'approved').length;
+  document.getElementById('hs-total').textContent = reports.filter(r => r.status === 'approved').length;
   const uniq = new Set(reports.filter(r => r.status === 'approved').map(r => r.username.toLowerCase())).size;
   document.getElementById('hs-users').textContent = uniq;
 }
@@ -710,15 +722,11 @@ function renderBrowse() {
 
 function renderAdmin() {
   editingId = null;
-  const sorted = [...reports].sort((a, b) => {
-    if (a.status === 'pending' && b.status !== 'pending') return -1;
-    if (b.status === 'pending' && a.status !== 'pending') return 1;
-    return b.timestamp - a.timestamp;
-  });
-  const groups = groupByUser(sorted);
+  const pending = reports.filter(r => r.status === 'pending').sort((a, b) => a.timestamp - b.timestamp);
+  const groups = groupByUser(pending);
   groups.forEach(ug => expandedUsers.add(ug.username.toLowerCase()));
   const grid = document.getElementById('admin-grid');
-  if (!groups.length) { grid.innerHTML = `<div class="empty"><div class="empty-icon">📭</div><h3>Brak zgłoszeń</h3><p>Żadne zgłoszenia nie czekają na moderację.</p></div>`; return; }
+  if (!groups.length) { grid.innerHTML = `<div class="empty"><div class="empty-icon">✅</div><h3>Brak oczekujących zgłoszeń</h3><p>Wszystkie zgłoszenia zostały rozpatrzone.</p></div>`; return; }
   grid.innerHTML = groups.map(ug => userGroupHTML(ug, true)).join('');
 }
 
@@ -837,9 +845,15 @@ function approveReport(id) {
 }
 
 function rejectReport(id) {
-  openModal('Odrzucić zgłoszenie?', 'Zgłoszenie nie pojawi się w publicznej bazie.', async () => {
-    await updateReport(id, { status: 'rejected' });
-    await loadReports();
+  openModal('Odrzucić zgłoszenie?', 'Zgłoszenie zostanie trwale usunięte z bazy danych.', async () => {
+    const session = (await supabaseClient.auth.getSession()).data.session;
+    const authHeader = session ? `Bearer ${session.access_token}` : `Bearer ${SUPABASE_KEY}`;
+    await fetch(`${SUPABASE_URL}/rest/v1/reports?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': authHeader }
+    });
+    reports = reports.filter(r => r.id !== id);
+    updateAll();
     renderAdmin();
   });
 }
