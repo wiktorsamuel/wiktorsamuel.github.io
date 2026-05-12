@@ -211,6 +211,16 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:va
 .lightbox.open{display:flex}
 .lightbox img{max-width:90vw;max-height:90vh;border-radius:var(--r);object-fit:contain}
 
+
+/* AUTOCOMPLETE DROPDOWNS */
+.autocomplete-wrap{position:relative}
+.autocomplete-list{position:absolute;top:100%;left:0;right:0;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);z-index:50;max-height:220px;overflow-y:auto;margin-top:3px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.autocomplete-item{padding:10px 14px;font-size:13px;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border)}
+.autocomplete-item:last-child{border-bottom:none}
+.autocomplete-item:hover,.autocomplete-item.active{background:var(--surface3)}
+.autocomplete-item .ac-main{font-weight:600;font-family:var(--mono);color:var(--text)}
+.autocomplete-item .ac-sub{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:var(--bg)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
@@ -363,7 +373,11 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:va
     <h2 class="form-title">Zgłoś podróbkę</h2>
     <p class="form-subtitle">Zgłoszenie trafi do moderacji. Pola oznaczone <span style="color:var(--accent)">*</span> są wymagane.</p>
     <div class="form-grid">
-      <div class="form-group"><label>Nick użytkownika Vinted <span class="req">*</span></label><input type="text" id="f-username" placeholder="np. monika_sklep22"></div>
+      <div class="form-group autocomplete-wrap">
+        <label>Nick użytkownika Vinted <span class="req">*</span></label>
+        <input type="text" id="f-username" placeholder="np. monika_sklep22" autocomplete="off" oninput="onUsernameInput()" onblur="hideDropdown('ac-username')" onfocus="onUsernameInput()">
+        <div class="autocomplete-list" id="ac-username" style="display:none"></div>
+      </div>
       <div class="form-group"><label>Kraj konta <span class="req">*</span></label><select id="f-country"><option value="">— wybierz kraj —</option></select></div>
     </div>
     <div class="form-grid">
@@ -371,9 +385,10 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:va
       <div class="form-group"><label>Link do ogłoszenia</label><input type="url" id="f-listing" placeholder="https://www.vinted.pl/items/..." oninput="checkDuplicate()"><div class="dup-warning" id="dup-warning">⚠ To ogłoszenie zostało już zgłoszone.</div></div>
     </div>
     <div class="form-grid full">
-      <div class="form-group">
+      <div class="form-group autocomplete-wrap">
         <label>Marka podróbki <span class="req">*</span></label>
-        <input type="text" id="f-brand" placeholder="np. Nike, Louis Vuitton, Stone Island...">
+        <input type="text" id="f-brand" placeholder="np. Nike, Louis Vuitton, Stone Island..." autocomplete="off" oninput="onBrandInput()" onblur="hideDropdown('ac-brand')" onfocus="onBrandInput()">
+        <div class="autocomplete-list" id="ac-brand" style="display:none"></div>
       </div>
     </div>
     <hr class="form-divider">
@@ -533,6 +548,8 @@ async function loadReports() {
     reports = [];
   }
   updateAll();
+  // Animuj liczniki przy pierwszym załadowaniu
+  if (document.getElementById('view-home').classList.contains('active')) updateHomeStatsAnimated();
 }
 
 async function saveReports() {
@@ -796,7 +813,8 @@ function removePhoto(i) { uploadedPhotos.splice(i, 1); renderPreviews(); }
 
 function checkDuplicate() {
   const val = document.getElementById('f-listing').value.trim();
-  document.getElementById('dup-warning').classList.toggle('show', val && reports.some(r => r.listing && r.listing.trim() === val));
+  const isDup = val && reports.some(r => r.listing && r.listing.trim() === val);
+  document.getElementById('dup-warning').classList.toggle('show', isDup);
 }
 
 async function submitReport() {
@@ -809,7 +827,8 @@ async function submitReport() {
   if (!brand) { alert('Wpisz markę podróbki.'); return; }
   if (!uploadedPhotos.length) { alert('Dodaj co najmniej jedno zdjęcie dowodowe.'); return; }
   if (listing && reports.some(r => r.listing && r.listing.trim() === listing)) {
-    if (!confirm('To ogłoszenie zostało już zgłoszone. Czy mimo to chcesz wysłać?')) return;
+    alert('To ogłoszenie zostało już zgłoszone. Nie można dodać duplikatu.');
+    return;
   }
   const r = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), timestamp: Date.now(), status: 'pending', username, country, profile: document.getElementById('f-profile').value.trim(), listing, brand, description: document.getElementById('f-desc').value.trim(), photos: uploadedPhotos.map(p => ({ name: p.name, dataUrl: p.dataUrl })), editLog: null };
   const submitBtn = document.querySelector('.btn-primary');
@@ -873,7 +892,90 @@ function showView(v) {
   if (tab) tab.classList.add('active');
   if (v === 'browse') renderBrowse();
   if (v === 'admin' && currentAdmin) renderAdmin();
-  if (v === 'home') updateHomeStats();
+  if (v === 'home') updateHomeStatsAnimated();
+}
+
+// ── AUTOCOMPLETE ──────────────────────────────────────────────────────────
+function hideDropdown(id) {
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  }, 150);
+}
+
+function onUsernameInput() {
+  const q = document.getElementById('f-username').value.trim().toLowerCase();
+  const list = document.getElementById('ac-username');
+  if (!q) { list.style.display = 'none'; return; }
+
+  // Zbierz unikalnych użytkowników z bazy
+  const users = [];
+  const seen = new Set();
+  reports.forEach(r => {
+    const key = r.username.toLowerCase();
+    if (!seen.has(key) && key.includes(q)) {
+      seen.add(key);
+      users.push(r);
+    }
+  });
+
+  if (!users.length) { list.style.display = 'none'; return; }
+
+  list.innerHTML = users.slice(0, 8).map(r => `
+    <div class="autocomplete-item" onmousedown="selectUser('${r.username.replace(/'/g,"\'")}','${(r.profile||'').replace(/'/g,"\'")}','${(r.country||'').replace(/'/g,"\'")}')">
+      <div class="ac-main">@${r.username}</div>
+      <div class="ac-sub">${r.country || ''}${r.profile ? ' · profil zapisany' : ''}</div>
+    </div>`).join('');
+  list.style.display = 'block';
+}
+
+function selectUser(username, profile, country) {
+  document.getElementById('f-username').value = username;
+  if (profile) document.getElementById('f-profile').value = profile;
+  if (country) {
+    const sel = document.getElementById('f-country');
+    for (let o of sel.options) { if (o.value === country) { sel.value = country; break; } }
+  }
+  document.getElementById('ac-username').style.display = 'none';
+}
+
+function onBrandInput() {
+  const q = document.getElementById('f-brand').value.trim().toLowerCase();
+  const list = document.getElementById('ac-brand');
+  if (!q) { list.style.display = 'none'; return; }
+
+  const brands = [...new Set(reports.map(r => r.brand).filter(b => b && b.toLowerCase().includes(q)))];
+  if (!brands.length) { list.style.display = 'none'; return; }
+
+  list.innerHTML = brands.slice(0, 8).map(b => `
+    <div class="autocomplete-item" onmousedown="selectBrand('${b.replace(/'/g,"\'")}')">
+      <div class="ac-main">${b}</div>
+    </div>`).join('');
+  list.style.display = 'block';
+}
+
+function selectBrand(brand) {
+  document.getElementById('f-brand').value = brand;
+  document.getElementById('ac-brand').style.display = 'none';
+}
+
+// ── ANIMACJA LICZNIKÓW ────────────────────────────────────────────────────
+function animateCounter(el, target, duration) {
+  const start = performance.now();
+  function step(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    el.textContent = Math.round(eased * target);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function updateHomeStatsAnimated() {
+  const approved = reports.filter(r => r.status === 'approved').length;
+  const uniq = new Set(reports.filter(r => r.status === 'approved').map(r => r.username.toLowerCase())).size;
+  animateCounter(document.getElementById('hs-total'), approved, 800);
+  animateCounter(document.getElementById('hs-users'), uniq, 800);
 }
 
 loadReports();
